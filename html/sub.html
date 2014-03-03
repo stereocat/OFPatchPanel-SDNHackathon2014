@@ -1,0 +1,155 @@
+<html>
+    <head>
+        <meta name="copyright" content="Copyright &copy; 2014 Masao Nishie. All Rights Reserved.">
+        <meta charset="utf-8">
+        <title>OF-Patch(Logical connection)</title>
+        <script type='text/javascript' src="topology_viewer.js"></script>
+        <link rel="stylesheet" href="css/jquery-ui.css">
+        <script src="js/jquery-1.9.1.js"></script>
+        <script src="js/jquery-ui.js"></script>
+        <script src="rpc.js"></script>
+        <link rel="stylesheet" href="css/sub_style.css">
+    </head>
+    <body>
+        <div id = "info" style="text-align:center; font-size:20px; color:red;"></div>
+        <div id = "topology" style="width:100%; height:100%"></div>
+
+        <!-- device menu dialog -->
+        <div id="deviceMenu" title="Device Menu"></div>
+
+        <script>
+            // tmp ....... hard coding ...
+            var OFC_URL = "192.168.79.133";
+            var OFC_PORT = "8080";
+            var DPID = 1;
+            var restExecuter = new REST( OFC_URL, OFC_PORT , true);
+
+
+            // It should use the DB ...
+            var storage = sessionStorage; // webstorage
+            var phy_info = JSON.parse( storage.getItem('phTopology') );
+            console.log(phy_info);
+
+            var selectNode = null;
+            var sourceNode = null;
+
+            /* topology */
+            var topology = new TopologyViewer(document.getElementById("topology"));
+
+            /* override */
+            topology.onNodeClick=function(obj){
+                selectNode = obj;
+                if(sourceNode != null){
+                    //addlink
+                    var linkObj = {port: topology.links.length, source: sourceNode, target: obj};
+
+                    console.log(selectNode.ofport,sourceNode.ofport);
+                    var src = Number(String(selectNode.ofPort).split('.')[1]);
+                    var dst = Number(String(sourceNode.ofPort).split('.')[1]);
+
+
+                    // sending REST-messages to ryu　(tmp...)
+                    // It should implement server-side applications...
+                    restExecuter.execute("patch/flow", "PUT" , {dpid:DPID,inport:src,outport:dst} ,function(){
+                        restExecuter.execute("patch/flow", "PUT" , {dpid:DPID,inport:dst,outport:src} ,function(){
+                            // tmp....
+                        });                            
+                    });
+
+
+                    topology.links.push(linkObj);
+                    topology.update();
+
+                    sourceNode = null;
+                    $("#info").text("");
+                    return;
+                }
+
+                if(obj.id == "ofpatch"){
+                    return;
+                }
+
+                console.log(obj);
+                $( "#deviceMenu" ).dialog({
+                  resizable: false,
+                  height:80,
+                  width:280,
+                  modal: true,
+                  buttons: {
+                    "Add link": function() {
+                      sourceNode = selectNode;
+                      $("#info").text("Please select a destination device!");
+                      $( this ).dialog( "close" );
+                    },
+                    Edit: function() {
+                      
+                      // 
+                      
+                      $( this ).dialog( "close" );
+                    },
+                    Delete: function() {
+                      $( this ).dialog( "close" );
+                      topology.deleteById(obj.id);
+                      topology.update();
+                    },
+                    Cancel: function() {
+                      $( this ).dialog( "close" );
+                    }
+                  }
+                });
+
+            }
+
+            /* override */
+            topology.onNodeMouseOver=function(obj){
+                //console.log(obj);
+            }
+
+
+            var addNode = function(dName,dType,ipAddr,userId,password,ofport){
+                var randId = Math.floor(Math.random()*99999999999999999999+1);
+                var imgStr = "";
+                if(dType == "Server"){
+                    imgStr = "img/Server.png";
+                } else if(dType == "Router"){
+                    imgStr = "img/Router.png";
+                } else if(dType == "L2Switch"){
+                    imgStr = "img/L2Switch.png";
+                }
+                
+                var item = {id: randId, text:dName, type:dType, ipAddr:ipAddr, userId:userId, password:password, img:imgStr,ofPort:ofport};
+                topology.nodes.push(item);
+                topology.update();
+            }
+
+
+            var addLink = function(){
+                sourceNode = selectNode;
+                $("#info").text("Please select a destination device!");
+            }
+
+
+            for(var i = 0;i < phy_info.length;i++){
+                
+                var type = "";
+                var name = "";
+                var ofPortNumber = phy_info[i].portName;
+
+                //uh........ lol
+                var tmp = phy_info[i].device;
+                var tmp1 = tmp.split('.')[0];
+                name = tmp1.split(']')[1];
+
+                var tmp2 = tmp1.split(']')[0];
+                type = tmp2.split('[')[1];
+
+                addNode(phy_info[i].device,type,"","","",ofPortNumber);
+                
+
+            }
+
+            
+
+        </script>
+    </body>
+</html>

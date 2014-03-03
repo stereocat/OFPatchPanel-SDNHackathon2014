@@ -1,0 +1,393 @@
+<html>
+    <head>
+        <meta name="copyright" content="Copyright &copy; 2014 Masao Nishie. All Rights Reserved.">
+        <meta charset="utf-8">
+        <title>OF-Patch(Physical connection)</title>
+        <script type='text/javascript' src="topology_viewer.js"></script>
+        <link rel="stylesheet" href="css/jquery-ui.css">
+        <script src="js/jquery-1.9.1.js"></script>
+        <script src="js/jquery-ui.js"></script>
+        <script type="text/javascript" src= "js/d3.js"></script>
+        <script type="text/javascript" src= "js/d3.layout.js"></script>
+        <script type="text/javascript" src= "js/packages.js"></script>
+        <link rel="stylesheet" href="css/main_style.css">
+  </head>
+  <body>
+    <button id="create-user" class="btn" style="position:absolute; top:50px; right:100px;">Add new device</button>
+    <input type="button" class ="btn" value="Logical connection" onclick="openNewWindow()">
+
+    <!-- edit dialog -->
+    <div id="dialog-form" title="Edit device">
+      <p class="validateTips">All form fields are required.</p>
+      <form>
+      <fieldset>
+        <label for="deviceName">deviceName</label>
+        <input type="text" name="deviceName" id="deviceName" class="text ui-widget-content ui-corner-all">
+        <label for="deviceType">deviceType</label>
+        <select name="deviceType" id="deviceType" class="text ui-widget-content ui-corner-all">
+            <option>Server</option>
+            <option>Router</option>
+            <option>L2Switch</option>
+        </select>
+        <label for="ipAddr">ipAddr</label>
+        <input type="text" name="ipAddr" id="ipAddr" value="" class="text ui-widget-content ui-corner-all">
+        <label for="userId">userId</label>
+        <input type="userId" name="userId" id="userId" value="" class="text ui-widget-content ui-corner-all">
+        <label for="password">Password</label>
+        <input type="password" name="password" id="password" value="" class="text ui-widget-content ui-corner-all">
+      </fieldset>
+      </form>
+    </div>
+
+    <div style="text-align:center; color:yellow; text-shadow: 5px 5px 3px #000; font-size:40px; height:100px">OF-Patch</div>
+
+    <div id = "info" style="text-align:center; font-size:20px; color:red;"></div>
+
+    <div id="ofpatch"></div>
+    <div hidden style="position:absolute;bottom:0;font-size:18px;">tension: <input style="position:absolute;top:3px;" type="range" min="0" max="100" value="85"></div>
+
+    <script type="text/javascript">
+
+    var storage = sessionStorage; // tmp...
+    storage.clear(); // initialize...
+
+
+    function savePhy() {
+      var json = [];
+
+      //uh...
+      for(var i = 0;i< topo.length;i++){
+        if(topo[i].dName == "OFPatch"){
+          var devicePort = "";
+          if(topo[i].imports.length > 0){
+            devicePort = topo[i].imports[0];
+            json.push({portName:topo[i].name, device: devicePort});
+          }
+        }
+      }
+
+      storage.setItem("phTopology", JSON.stringify(json));
+    }
+
+
+
+    function openNewWindow(){
+      savePhy();
+      window.open('sub.html', '', 'width=800,height=800');
+    }
+
+    // tmp...
+    var sourceNode = null;
+
+    /* initialize */
+    var topo = [
+      {"name":"OFPatch.01","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.02","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.03","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.04","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.05","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.05","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.06","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.07","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.08","imports":[],"dName":"OFPatch"},
+      {"name":"OFPatch.09","imports":[],"dName":"OFPatch"}
+    ];
+
+  PatchViewer(document.getElementById("ofpatch"),topo);
+
+
+
+function PatchViewer(element, json){
+
+  element.innerHTML = "";
+  var w = document.documentElement.clientWidth;
+  var h = document.documentElement.clientHeight;
+
+  var rx = w / 2,
+      ry = h / 2,
+      m0,
+      rotate = 0
+      pi = Math.PI;
+   
+  var splines = [];
+  
+  var cluster = d3.layout.cluster()
+      .size([360, ry - 160])
+      .sort(function(a, b) { return d3.ascending(a.key, b.key); });
+  
+  var bundle = d3.layout.bundle();
+   
+  var line = d3.svg.line.radial()
+      .interpolate("bundle")
+      .tension(0.5)
+      .radius(function(d) { return d.y; })
+      .angle(function(d) { return d.x / 180 * Math.PI; });
+  
+
+  var div = d3.select("#"+element.id)
+      .style("width", w + "px")
+      .style("height", w + "px")
+      .style("position", "absolute");
+
+  var svg = div.append("svg:svg")
+      .attr("width", w)
+      .attr("height", w)
+    .append("svg:g")
+      .attr("transform", "translate(" + rx + "," + ry + ")");
+   
+  svg.append("svg:path")
+      .attr("class", "arc")
+      .attr("d", d3.svg.arc().outerRadius(ry - 180).innerRadius(0).startAngle(0).endAngle(2 * Math.PI))
+      .on("mousedown", mousedown);
+
+
+
+  var nodes = cluster.nodes(packages.root(json)),
+      links = packages.imports(nodes),
+      splines = bundle(links);
+ 
+
+  var path = svg.selectAll("path.link")
+      .data(links)
+    .enter().append("svg:path")
+      .attr("class", function(d) { return "link source-" + d.source.name.replace(".", "_") + " target-" + d.target.name.replace(".", "_"); })
+      .attr("d", function(d, i) { return line(splines[i]); });
+  var groupData = svg.selectAll("g.group")
+    .data(nodes.filter(function(d) { return (d.depth == 1) && d.children; }))
+    .enter().append("group")
+    .attr("class", "group");
+  
+  var groupArc = d3.svg.arc()
+  .innerRadius(ry - 147)
+  .outerRadius(ry - 0)
+  .startAngle(function(d) { return (findStartAngle(d.__data__.children)-2) * pi / 180;})
+  .endAngle(function(d) { return (findEndAngle(d.__data__.children)+2) * pi / 180});
+  
+  svg.selectAll("g.arc")
+  .data(groupData[0])
+  .enter().append("svg:path")
+  .attr("d", groupArc)
+  .attr("class", "groupArc")
+  .style("fill", "rgba(188, 210, 238,1)")
+  .style("fill-opacity", 1);
+
+
+  svg.selectAll("g.arcText")
+  .data(nodes.filter(function(n) { if(n.depth == 1){return n;} }))
+  .enter().append("svg:g")
+  .attr("transform", function(d) {console.log(d); return "rotate(" + (d.x-90) + ")translate(" + d.y + ")"; })
+  .append("svg:text")
+  .attr("dx", function(d) { return ry-250} )
+  .attr("dy", function(d) {return -d.y/9})
+  .style("font-size", "16px")
+  .style("fill-opacity", 1)
+  .style("writing-mode", "tb-rl")
+  .style("fill", "#800080")
+  .text(function(d) { return d.key;})
+  .on("click", function(d){
+    //portClick(d);
+  });
+
+  svg.selectAll("g.node")
+      .data(nodes.filter(function(n) { return !n.children; }))
+    .enter().append("svg:g")
+      .attr("class", "node")
+      .attr("id", function(d) { return "node-" + d.name.replace(".", "_"); })
+      .attr("transform", function(d) { return "rotate(" + (d.x - 90) + ")translate(" + d.y + ")"; })
+    .append("svg:text")
+      .attr("dx", function(d) { return d.x < 180 ? 25 : -25; })
+      .attr("dy", ".31em")
+      .attr("text-anchor", function(d) { return d.x < 180 ? "start" : "end"; })
+      .attr("transform", function(d) { return d.x < 180 ? null : "rotate(180)"; })
+      .style("fill", "#000080")
+      .text(function(d) { return d.key.replace(/_/g, ' '); })
+      .on("mouseover", mouseover)
+      .on("mouseout", mouseout)
+      .on("click", function(d){
+        portClick(d);
+      });
+
+  d3.select("input[type=range]").on("change", function() {
+    line.tension(this.value / 100);
+    path.attr("d", function(d, i) { return line(splines[i]); });
+  });
+  
+  d3.select(window)
+      .on("mousemove", mousemove)
+      .on("mouseup", mouseup);
+  
+  function mouse(e) {
+    return [e.pageX - rx, e.pageY - ry];
+  }
+  
+  function mousedown() {
+    m0 = mouse(d3.event);
+    d3.event.preventDefault();
+  }
+   
+  function mousemove() {
+    if (m0) {
+      var m1 = mouse(d3.event),
+          dm = Math.atan2(cross(m0, m1), dot(m0, m1)) * 180 / Math.PI;
+      div.style("-webkit-transform", "translate3d(0," + (ry - rx) + "px,0)rotate3d(0,0,0," + dm + "deg)translate3d(0," + (rx - ry) + "px,0)");
+    }
+  }
+   
+  function mouseup() {
+    if (m0) {
+      var m1 = mouse(d3.event),
+          dm = Math.atan2(cross(m0, m1), dot(m0, m1)) * 180 / Math.PI;
+   
+      rotate += dm;
+      if (rotate > 360) rotate -= 360;
+      else if (rotate < 0) rotate += 360;
+      m0 = null;
+   
+      div.style("-webkit-transform", "rotate3d(0,0,0,0deg)");
+   
+      svg.attr("transform", "translate(" + rx + "," + ry + ")rotate(" + rotate + ")")
+        .selectAll("g.node text")
+          .attr("dx", function(d) { return (d.x + rotate) % 360 < 180 ? 25 : -25; })
+          .attr("text-anchor", function(d) { return (d.x + rotate) % 360 < 180 ? "start" : "end"; })
+          .attr("transform", function(d) { return (d.x + rotate) % 360 < 180 ? null : "rotate(180)"; });
+    }
+  }
+
+
+
+   
+  function mouseover(d) {
+    var s = "path.link.source-" + d.name.replace(".", "_").replace("/","_");
+    var t = "path.link.target-" + d.name.replace(".", "_").replace("/","_");
+
+    svg.selectAll(t)
+        .classed("target", true)
+        //.each(updateNodes("source", true));
+   
+    svg.selectAll(s)
+        .classed("source", true)
+        //.each(updateNodes("target", true));
+  }
+   
+  function mouseout(d) {
+    var s = "path.link.source-" + d.name.replace(".", "_");
+    var t = "path.link.target-" + d.name.replace(".", "_");
+
+    svg.selectAll(s)
+        .classed("source", false)
+        //.each(updateNodes("target", false));
+   
+    svg.selectAll(t)
+        .classed("target", false)
+        //.each(updateNodes("source", false));
+  }
+
+
+  function cross(a, b) {
+    return a[0] * b[1] - a[1] * b[0];
+  }
+   
+  function dot(a, b) {
+    return a[0] * b[0] + a[1] * b[1];
+  }
+   
+  function findStartAngle(children) {
+      var min = children[0].x;
+      children.forEach(function(d) {
+         if (d.x < min)
+             min = d.x;
+      });
+      return min;
+  }
+   
+  function findEndAngle(children) {
+      var max = children[0].x;
+      children.forEach(function(d) {
+         if (d.x > max)
+             max = d.x;
+      });
+      return max;
+  }
+
+
+  function addNode(dName,dType,ipAddr,userId,password){
+      
+      //tmp...
+      var tmpPortCount = 9;
+      
+      for(var i = 0;i< tmpPortCount;i++){
+        var nameStr = "["+dType+"] "+dName + "."+ String(i+1);
+        topo.push({"name":nameStr,"imports":[],"dName":dName,"ipAddr":ipAddr,"userId":userId,"password":password});
+      }
+      PatchViewer(document.getElementById("ofpatch"),topo);
+  }
+
+  function portClick(obj){
+    console.log(obj);
+
+    if(sourceNode != null){
+      if(obj.dName == "OFPatch"){
+        for(var i = 0; i < topo.length;i++){
+            if(topo[i].name == obj.name){
+              topo[i].imports = [];
+              topo[i].imports.push(sourceNode.name);
+
+              PatchViewer(document.getElementById("ofpatch"),topo);
+              $("#info").text("");
+              sourceNode = null;
+              return;
+            }
+
+          }
+        }
+      } else {
+      if(obj.dName == "OFPatch"){
+        return;
+      }
+      sourceNode = obj;
+      $("#info").text("Please select a OFPatch's port");
+    }
+  }
+
+
+  /* Edit Dialog */
+      $(function() {
+          var dName = $( "#deviceName" ),
+            dType = $( "#deviceType" ),
+            ipAddr = $( "#ipAddr" ),
+            userId = $( "#userId" ),
+            password = $( "#password" ),
+            allFields = $( [] ).add( dName ).add( ipAddr ).add( userId ).add( password ).add( allFields ),
+            tips = $( ".validateTips" );
+       
+          $( "#dialog-form" ).dialog({
+            autoOpen: false,
+            height: 600,
+            width: 500,
+            modal: true,
+            buttons: {
+              "Commit": function() {
+                  addNode(dName.val(),dType.val(),ipAddr.val(),userId.val(),password.val());
+                  $( this ).dialog( "close" );
+              },
+              Cancel: function() {
+                $( this ).dialog( "close" );
+              }
+            },
+            close: function() {
+              allFields.val( "" ).removeClass( "ui-state-error" );
+            }
+          });
+       
+          $( "#create-user" )
+            .button()
+            .click(function() {
+              $( "#dialog-form" ).dialog( "open" );
+            });
+      });
+  }
+
+
+    </script>
+  </body>
+</html>
